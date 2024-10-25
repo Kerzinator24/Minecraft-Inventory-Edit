@@ -220,7 +220,8 @@
   <button class="close-modal" onclick="closeImportModal()">Close</button>
   <div class="modal-content" style="text-align: center; padding: 20px;">
     <h3>Import Inventory</h3>
-    <input type="file" id="importFileInput" accept=".json" onchange="importFromJSON()">
+    <input type="file" id="importJsonInput" style="display:none" accept=".json" onchange="handleJsonImport(event)">
+    <button onclick="document.getElementById('importJsonInput').click()">Import JSON</button>
   </div>
 </div>
 
@@ -318,16 +319,25 @@
     const itemList = document.getElementById('itemList');
     itemList.innerHTML = '';
 
-    for (let i = 1; i < guiItems.length; i++) {
-      const item = guiItems[i];
+    guiItems.slice(1).forEach((item, index) => {
       const itemDiv = document.createElement('div');
       itemDiv.className = 'item-entry';
       itemDiv.innerHTML = `
-                    <span>${item.texture.split('/').pop()}</span>
-                    <button onclick="removeItem(${i})">Remove</button>
-                `;
+      <span>${item.texture.split('/').pop()}</span>
+      <input type="text" placeholder="Custom Name" value="${item.renamed || ''}" onchange="updateItemName(${index + 1}, this.value)">
+      <input type="number" min="1" max="64" value="${item.amount || 1}" onchange="updateItemAmount(${index + 1}, this.value)">
+      <button onclick="removeItem(${index + 1})">Remove</button>
+    `;
       itemList.appendChild(itemDiv);
-    }
+    });
+  }
+
+  function updateItemName(index, name) {
+    guiItems[index].renamed = name;
+  }
+
+  function updateItemAmount(index, amount) {
+    guiItems[index].amount = parseInt(amount);
   }
 
   function showPreview() {
@@ -338,8 +348,16 @@
       previewRenderer = new GuiRender({}, document.getElementById("previewContainer"));
     }
 
-    previewRenderer.render(guiItems);
+    // Pass updated item data with renamed and amount properties
+    const renderedItems = guiItems.map(item => ({
+      ...item,
+      displayName: item.renamed || item.texture.split('/').pop(),
+      amount: item.amount || 1,
+    }));
+
+    previewRenderer.render(renderedItems);
   }
+
 
   function closePreview() {
     const modal = document.getElementById('previewModal');
@@ -381,40 +399,58 @@
   }
 
   function exportAsJSON() {
-    const json = JSON.stringify(guiItems, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'inventory.json';
-    link.click();
+    const items = guiItems.map(item => ({
+      name: item.name,
+      texture: item.texture,
+      pos: item.pos,
+      uv: item.uv,
+      layer: item.layer,
+      renamed: item.renamed || "",  // Add renamed property
+      amount: item.amount || 1       // Add amount property
+    }));
+
+    const blob = new Blob([JSON.stringify({ items }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventory.json';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
-  function importFromJSON() {
-    const fileInput = document.getElementById('importFileInput');
-    const file = fileInput.files[0];
+  function importFromJson(jsonData) {
+    try {
+      const data = JSON.parse(jsonData);
+      guiItems = data.items.map(item => ({
+        name: item.name,
+        texture: item.texture,
+        pos: item.pos,
+        uv: item.uv,
+        layer: item.layer,
+        renamed: item.renamed || "",  // Set renamed property
+        amount: item.amount || 1       // Set amount property
+      }));
 
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        try {
-          const data = JSON.parse(event.target.result);
-
-          // Validate and load the data
-          if (Array.isArray(data)) {
-            guiItems = data;
-            updateItemList();
-            closeImportModal();
-            alert("Inventory loaded successfully!");
-          } else {
-            alert("Invalid JSON format.");
-          }
-        } catch (e) {
-          alert("Error loading JSON file.");
-        }
-      };
-      reader.readAsText(file);
+      updateItemList();
+      showPreview(); // Optionally, re-render preview if needed
+    } catch (error) {
+      console.error("Error parsing JSON:", error);
+      alert("Failed to import JSON: Invalid format.");
     }
   }
+
+  // Function to trigger file input for JSON import
+  function handleJsonImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      importFromJson(e.target.result);
+    };
+    reader.readAsText(file);
+  }
+
 
   function showPreview() {
     const modal = document.getElementById('previewModal');
@@ -451,7 +487,7 @@
   }
 
   function generateJavaCode(items) {
-    let code = `import org.bukkit.Bukkit;\nimport org.bukkit.Material;\nimport org.bukkit.inventory.Inventory;\nimport org.bukkit.inventory.ItemStack;\n\n`;
+    let code = `import org.bukkit.Bukkit;\nimport org.bukkit.Material;\nimport org.bukkit.inventory.Inventory;\nimport org.bukkit.inventory.ItemStack;\nimport org.bukkit.inventory.meta.ItemMeta;\n\n`;
     code += `public class InventoryInitializer {\n`;
     code += `    public static Inventory createInventory() {\n`;
     code += `        Inventory inventory = Bukkit.createInventory(null, 54, "Custom Inventory");\n\n`;
@@ -463,7 +499,11 @@
         const y = parseInt(item.pos[1] / 18);
         const slot = y * 9 + x;
 
-        code += `        inventory.setItem(${slot}, new ItemStack(Material.${materialName}));\n`;
+        code += `        ItemStack item = new ItemStack(Material.${materialName}, ${item.amount || 1});\n`;
+        code += `        ItemMeta meta = item.getItemMeta();\n`;
+        if (item.renamed) code += `        meta.setDisplayName("${item.renamed}");\n`;
+        code += `        item.setItemMeta(meta);\n`;
+        code += `        inventory.setItem(${slot}, item);\n\n`;
       }
     });
 
@@ -474,8 +514,8 @@
   }
 
   function generateKotlinCode(items) {
-    let code = `import org.bukkit.Bukkit\nimport org.bukkit.Material\nimport org.bukkit.inventory.Inventory\nimport org.bukkit.inventory.ItemStack\n\n`;
-    code += `class InventoryInitializer {\n`;
+    let code = `import org.bukkit.Bukkit\nimport org.bukkit.Material\nimport org.bukkit.inventory.Inventory\nimport org.bukkit.inventory.ItemStack\nimport org.bukkit.inventory.meta.ItemMeta\n\n`;
+    code += `object InventoryInitializer {\n`;
     code += `    fun createInventory(): Inventory {\n`;
     code += `        val inventory = Bukkit.createInventory(null, 54, "Custom Inventory")\n\n`;
 
@@ -486,7 +526,11 @@
         const y = parseInt(item.pos[1] / 18);
         const slot = y * 9 + x;
 
-        code += `        inventory.setItem(${slot}, ItemStack(Material.${materialName}))\n`;
+        code += `        val item = ItemStack(Material.${materialName}, ${item.amount || 1})\n`;
+        code += `        val meta = item.itemMeta\n`;
+        if (item.renamed) code += `        meta.displayName = "${item.renamed}"\n`;
+        code += `        item.itemMeta = meta\n`;
+        code += `        inventory.setItem(${slot}, item)\n\n`;
       }
     });
 
@@ -495,6 +539,7 @@
     code += `}\n`;
     return code;
   }
+
 
   initializeGUI();
 </script>
