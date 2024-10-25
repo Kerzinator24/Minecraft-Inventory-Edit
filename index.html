@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Minecraft Inventory Editor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/94/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/InventivetalentDev/MineRender@1.4.6/dist/gui.min.js"></script>
+  <style>
+    body {
+      font-family: 'Minecraft', Arial, sans-serif;
+      background-color: #2c2c2c;
+      color: #ffffff;
+      margin: 0;
+      padding: 0;
+    }
+
+    #container {
+      padding: 20px;
+    }
+
+    #controls {
+      background-color: #3c3c3c;
+      padding: 20px;
+      border-radius: 5px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .control-group {
+      margin-bottom: 15px;
+      padding: 10px;
+      background-color: #444;
+      border-radius: 3px;
+    }
+
+    input, button {
+      background-color: #555;
+      color: white;
+      border: 1px solid #666;
+      padding: 5px;
+      margin: 5px 0;
+      border-radius: 3px;
+    }
+
+    #itemInput {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 5px;
+      margin: 15px 0;
+    }
+
+    .grid-cell {
+      aspect-ratio: 1;
+      background-color: #555;
+      border: 1px solid #666;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .grid-cell:hover {
+      background-color: #666;
+    }
+
+    .grid-cell.selected {
+      background-color: #4CAF50;
+    }
+
+    button {
+      cursor: pointer;
+      padding: 8px 15px;
+    }
+
+    button:hover {
+      background-color: #666;
+    }
+
+    #itemList {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .item-entry {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px;
+      background-color: #4a4a4a;
+      margin: 2px 0;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      z-index: 1000;
+    }
+
+    .modal-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 80%;
+    }
+
+    #previewContainer {
+      width: 100%;
+      height: 100%;
+      background-color: #3c3c3c;
+      border: 2px solid #555;
+    }
+
+    .close-modal {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      color: #fff;
+      font-size: 24px;
+      cursor: pointer;
+      background-color: #5c5c5c;
+      padding: 10px 20px;
+      border-radius: 5px;
+      border: none;
+    }
+
+    .preview-button {
+      display: block;
+      width: 100%;
+      padding: 15px;
+      margin-top: 20px;
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      font-size: 16px;
+    }
+
+    .preview-button:hover {
+      background-color: #45a049;
+    }
+
+    .add-button {
+      width: 100%;
+      padding: 10px;
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+
+    .add-button:disabled {
+      background-color: #666;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+<div id="container">
+  <div id="controls">
+    <div class="control-group">
+      <h3>Add New Item</h3>
+      <input type="text" id="itemInput" placeholder="Enter item name (e.g. kelp, yellow_carpet, iron_pickaxe)">
+      <div class="grid-container" id="gridContainer"></div>
+      <button class="add-button" id="addButton" disabled>Add Item</button>
+    </div>
+
+    <div class="control-group">
+      <h3>Current Items</h3>
+      <div id="itemList"></div>
+    </div>
+
+    <button class="preview-button" onclick="showPreview()">Show Preview</button>
+    <button class="preview-button" onclick="showExportModal()">Export</button>
+    <button class="preview-button" onclick="showImportModal()">Import</button>
+  </div>
+</div>
+
+<!-- Preview Modal -->
+<div id="previewModal" class="modal">
+  <button class="close-modal" onclick="closePreview()">Close</button>
+  <div class="modal-content">
+    <div id="previewContainer"></div>
+  </div>
+</div>
+
+<!-- Export Modal -->
+<div id="exportModal" class="modal">
+  <button class="close-modal" onclick="closeExportModal()">Close</button>
+  <div class="modal-content" style="text-align: center; padding: 20px;">
+    <h3>Export Inventory</h3>
+    <button onclick="exportAsImage()">Export as Image</button>
+    <button onclick="exportAsJSON()">Export as JSON</button>
+    <!-- Additional dropdown and button in the Export Modal -->
+    <select id="languageSelect">
+      <option value="java">Java</option>
+      <option value="kotlin">Kotlin</option>
+    </select>
+    <button onclick="exportAsCode()">Export as Code</button>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div id="importModal" class="modal">
+  <button class="close-modal" onclick="closeImportModal()">Close</button>
+  <div class="modal-content" style="text-align: center; padding: 20px;">
+    <h3>Import Inventory</h3>
+    <input type="file" id="importFileInput" accept=".json" onchange="importFromJSON()">
+  </div>
+</div>
+
+<script>
+  let guiItems = [];
+  let previewRenderer = null;
+  let selectedCell = null;
+
+  function initializeGUI() {
+    // Add the base container
+    guiItems.push({
+      name: "base",
+      texture: "/gui/container/generic_54",
+      uv: GuiRender.Positions.container.generic_54.uv,
+      pos: [0, 0],
+      layer: 0
+    });
+    createGrid();
+    updateItemList();
+    setupEventListeners();
+  }
+
+  function createGrid() {
+    const container = document.getElementById('gridContainer');
+    for (let y = 0; y < 6; y++) {
+      for (let x = 0; x < 9; x++) {
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell';
+        cell.dataset.x = x;
+        cell.dataset.y = y;
+        cell.textContent = `${x},${y}`;
+        container.appendChild(cell);
+      }
+    }
+  }
+
+  function setupEventListeners() {
+    const itemInput = document.getElementById('itemInput');
+    const addButton = document.getElementById('addButton');
+    const gridCells = document.querySelectorAll('.grid-cell');
+
+    itemInput.addEventListener('input', () => {
+      addButton.disabled = !itemInput.value || !selectedCell;
+    });
+
+    gridCells.forEach(cell => {
+      cell.addEventListener('click', (e) => {
+        if (selectedCell) {
+          selectedCell.classList.remove('selected');
+        }
+        cell.classList.add('selected');
+        selectedCell = cell;
+        addButton.disabled = !itemInput.value;
+      });
+    });
+
+    addButton.addEventListener('click', addItem);
+  }
+
+  function addItem() {
+    const itemName = document.getElementById('itemInput').value.toLowerCase().trim();
+    const x = parseInt(selectedCell.dataset.x);
+    const y = parseInt(selectedCell.dataset.y);
+
+    const newItem = {
+      name: "item",
+      texture: `/item/${itemName}`,
+      uv: [0, 0, 16, 16],
+      pos: GuiRender.Helper.inventorySlot(
+        [x, y],
+        GuiRender.Positions.container.generic_54.top_origin,
+        GuiRender.Positions.container.generic_54.item_offset
+      ),
+      layer: 1
+    };
+
+    guiItems.push(newItem);
+    updateItemList();
+
+    // Reset input and selection
+    document.getElementById('itemInput').value = '';
+    selectedCell.classList.remove('selected');
+    selectedCell = null;
+    document.getElementById('addButton').disabled = true;
+  }
+
+  function removeItem(index) {
+    if (index > 0) {
+      guiItems.splice(index, 1);
+      updateItemList();
+    }
+  }
+
+  function updateItemList() {
+    const itemList = document.getElementById('itemList');
+    itemList.innerHTML = '';
+
+    for (let i = 1; i < guiItems.length; i++) {
+      const item = guiItems[i];
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'item-entry';
+      itemDiv.innerHTML = `
+                    <span>${item.texture.split('/').pop()}</span>
+                    <button onclick="removeItem(${i})">Remove</button>
+                `;
+      itemList.appendChild(itemDiv);
+    }
+  }
+
+  function showPreview() {
+    const modal = document.getElementById('previewModal');
+    modal.style.display = 'block';
+
+    if (!previewRenderer) {
+      previewRenderer = new GuiRender({}, document.getElementById("previewContainer"));
+    }
+
+    previewRenderer.render(guiItems);
+  }
+
+  function closePreview() {
+    const modal = document.getElementById('previewModal');
+    modal.style.display = 'none';
+  }
+
+  window.onclick = function(event) {
+    const modal = document.getElementById('previewModal');
+    if (event.target === modal) {
+      closePreview();
+    }
+  }
+
+  function showExportModal() {
+    document.getElementById('exportModal').style.display = 'block';
+  }
+
+  function closeExportModal() {
+    document.getElementById('exportModal').style.display = 'none';
+  }
+
+  function showImportModal() {
+    document.getElementById('importModal').style.display = 'block';
+  }
+
+  function closeImportModal() {
+    document.getElementById('importModal').style.display = 'none';
+  }
+
+  async function exportAsImage() {
+    const canvas = document.getElementById('previewContainer').querySelector('canvas');
+    if (!canvas) return;
+
+    const image = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = image;
+    link.download = 'inventory.png';
+    link.click();
+  }
+
+  function exportAsJSON() {
+    const json = JSON.stringify(guiItems, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'inventory.json';
+    link.click();
+  }
+
+  function importFromJSON() {
+    const fileInput = document.getElementById('importFileInput');
+    const file = fileInput.files[0];
+
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const data = JSON.parse(event.target.result);
+
+          // Validate and load the data
+          if (Array.isArray(data)) {
+            guiItems = data;
+            updateItemList();
+            closeImportModal();
+            alert("Inventory loaded successfully!");
+          } else {
+            alert("Invalid JSON format.");
+          }
+        } catch (e) {
+          alert("Error loading JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  function showPreview() {
+    const modal = document.getElementById('previewModal');
+    modal.style.display = 'block';
+
+    if (!previewRenderer) {
+      previewRenderer = new GuiRender({}, document.getElementById("previewContainer"));
+    }
+
+    previewRenderer.render(guiItems);
+  }
+
+  function closePreview() {
+    document.getElementById('previewModal').style.display = 'none';
+  }
+
+  window.onclick = function(event) {
+    const previewModal = document.getElementById('previewModal');
+    const exportModal = document.getElementById('exportModal');
+    const importModal = document.getElementById('importModal');
+    if (event.target === previewModal) closePreview();
+    if (event.target === exportModal) closeExportModal();
+    if (event.target === importModal) closeImportModal();
+  }
+
+  function exportAsCode() {
+    const language = document.getElementById('languageSelect').value;
+    const code = language === 'java' ? generateJavaCode(guiItems) : generateKotlinCode(guiItems);
+    const blob = new Blob([code], { type: 'text/plain' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = language === 'java' ? 'InventoryInitializer.java' : 'InventoryInitializer.kt';
+    link.click();
+  }
+
+  function generateJavaCode(items) {
+    let code = `import org.bukkit.Bukkit;\nimport org.bukkit.Material;\nimport org.bukkit.inventory.Inventory;\nimport org.bukkit.inventory.ItemStack;\n\n`;
+    code += `public class InventoryInitializer {\n`;
+    code += `    public static Inventory createInventory() {\n`;
+    code += `        Inventory inventory = Bukkit.createInventory(null, 54, "Custom Inventory");\n\n`;
+
+    items.forEach(item => {
+      if (item.name === "item") {
+        const materialName = item.texture.split('/').pop().toUpperCase();
+        const x = parseInt(item.pos[0] / 18);
+        const y = parseInt(item.pos[1] / 18);
+        const slot = y * 9 + x;
+
+        code += `        inventory.setItem(${slot}, new ItemStack(Material.${materialName}));\n`;
+      }
+    });
+
+    code += `        return inventory;\n`;
+    code += `    }\n`;
+    code += `}\n`;
+    return code;
+  }
+
+  function generateKotlinCode(items) {
+    let code = `import org.bukkit.Bukkit\nimport org.bukkit.Material\nimport org.bukkit.inventory.Inventory\nimport org.bukkit.inventory.ItemStack\n\n`;
+    code += `class InventoryInitializer {\n`;
+    code += `    fun createInventory(): Inventory {\n`;
+    code += `        val inventory = Bukkit.createInventory(null, 54, "Custom Inventory")\n\n`;
+
+    items.forEach(item => {
+      if (item.name === "item") {
+        const materialName = item.texture.split('/').pop().toUpperCase();
+        const x = parseInt(item.pos[0] / 18);
+        const y = parseInt(item.pos[1] / 18);
+        const slot = y * 9 + x;
+
+        code += `        inventory.setItem(${slot}, ItemStack(Material.${materialName}))\n`;
+      }
+    });
+
+    code += `        return inventory\n`;
+    code += `    }\n`;
+    code += `}\n`;
+    return code;
+  }
+
+  initializeGUI();
+</script>
+</body>
+</html>
