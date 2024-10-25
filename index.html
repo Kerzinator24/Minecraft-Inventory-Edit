@@ -168,6 +168,28 @@
       background-color: #666;
       cursor: not-allowed;
     }
+    
+    /* Rainbow text styles */
+    .rainbow-text {
+      position: absolute;
+      bottom: 10px; /* Adjust as needed */
+      right: 10px; /* Adjust as needed */
+      font-size: 20px;
+      white-space: nowrap; /* Prevent line breaks */
+      animation: rainbow-animation 5s linear infinite; /* Animation effect */
+    }
+
+    /* Keyframes for rainbow effect */
+    @keyframes rainbow-animation {
+      0% { color: red; }
+      14% { color: orange; }
+      28% { color: yellow; }
+      42% { color: green; }
+      57% { color: blue; }
+      71% { color: indigo; }
+      85% { color: violet; }
+      100% { color: red; }
+    }
   </style>
 </head>
 <body>
@@ -224,6 +246,7 @@
     <button onclick="document.getElementById('importJsonInput').click()">Import JSON</button>
   </div>
 </div>
+<div class="rainbow-text">by Kerzinator_24</div>
 
 <script>
   let guiItems = [];
